@@ -12,8 +12,18 @@ app = Flask(__name__)
 CORS(app)
 
 # -- Configuration --
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///profiles.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS']= False
+database_url = os.getenv("DATABASE_URL")
+
+if database_url:
+    # This replaces 'postgres://' with 'postgresql://' for SQLAlchemy compatibility
+    if database_url.startswith("postgres://"):
+        database_url = database_url.replace("postgres://", "postgresql://", 1)
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+else:
+    # Local SQLite for development
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///profiles.db'
+
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
 
@@ -54,7 +64,6 @@ class Profile(db.Model):
 with app.app_context():
     db.create_all()
 
-# -- Helper functions --
 def get_external_data(name):
     try:
         # 1. Genderize
@@ -105,8 +114,8 @@ def get_external_data(name):
 @app.route('/api/profiles', methods=['POST'])
 def create_profile():
     data = request.get_json()
-    if not data or 'name' not in data or not str(data['name']).strip():
-        return jsonify({"status": "success", "message": "Missing or empty name"}), 400
+    if not data or 'name' not in data: #or not str(data['name']).strip():
+        return jsonify({"status": "error", "message": "Missing or empty name"}), 400
     
     name = str(data['name']).strip().lower()
 
@@ -155,7 +164,7 @@ def get_all_profiles():
 
 @app.route('/api/profiles/<id>', methods = ['GET'])
 def get_profile(id):
-    profile = Profile.query.get(id)
+    profile = db.session.get(Profile, id) #Profile.query.get(id)
     if not profile:
         return jsonify({
             "status": "error", "message": "Profile not found"}), 404
@@ -175,4 +184,5 @@ def delete_profile(id):
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5001)
+    port = int(os.environ.get("PORT", 5001))
+    app.run(host='0.0.0.0', port=port)
